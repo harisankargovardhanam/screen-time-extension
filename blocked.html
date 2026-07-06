@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Time's up</title>
+  <link rel="stylesheet" href="blocked.css" />
+</head>
+<body>
+  <main class="block-card">
+    <div class="block-icon">⏳</div>
+    <h1>Time's up for today</h1>
+    <p class="block-domain-line">
+      You've hit your daily limit for <strong id="domain">this site</strong>.
+    </p>
+    <p id="usage" class="block-usage"></p>
+    <p id="snooze-count" class="block-usage" hidden></p>
+    <div class="block-actions">
+      <button id="snooze" class="btn tonal">Snooze 5 min</button>
+      <button id="close" class="btn filled">Close tab</button>
+    </div>
+    <p class="block-hint">Limit resets at midnight. Manage limits from the extension popup.</p>
+  </main>
+  <script src="blocked.js"></script>
+</body>
+</html>
