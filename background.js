@@ -48,7 +48,7 @@ const ACHIEVEMENTS = {
   "deep-diver": { emoji: "🎯", title: "Deep Diver", desc: "Finished a focus session" },
   "iron-will": { emoji: "🔥", title: "Iron Will", desc: "7-day streak under your limits" },
   "golden-week": { emoji: "🏆", title: "Golden Week", desc: "7 days under your daily goal" },
-  "marathon-thumb": { emoji: "📜", title: "Marathon Thumb", desc: "Scrolled 1 km in one day" },
+  "marathon-thumb": { emoji: "📜", title: "Marathon Thumb", desc: "Scrolled 1 km in one day. Your thumb needs a rest", dubious: true },
 };
 
 async function award(id) {
@@ -62,8 +62,8 @@ async function award(id) {
     chrome.notifications.create(`achieve-${id}`, {
       type: "basic",
       iconUrl: "icons/icon128.png",
-      title: `Achievement unlocked ${a.emoji}`,
-      message: `${a.title} — ${a.desc}`,
+      title: a.dubious ? `Dubious honor ${a.emoji}` : `Achievement unlocked ${a.emoji}`,
+      message: `${a.title} — ${a.desc}.`,
       priority: 1,
     });
   }

@@ -493,6 +493,12 @@ h2 {
   filter: grayscale(1);
 }
 
+/* Ironic "dubious honor" badges get a warning tint, not a celebration. */
+.achieve.dubious:not(.locked) {
+  border-color: #e37400;
+  background: color-mix(in srgb, #e37400 8%, transparent);
+}
+
 .achieve-emoji {
   font-size: 26px;
 }

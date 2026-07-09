@@ -34,7 +34,7 @@ const ACHIEVEMENTS = {
   "deep-diver": { emoji: "🎯", title: "Deep Diver", desc: "Finished a focus session" },
   "iron-will": { emoji: "🔥", title: "Iron Will", desc: "7-day streak under your limits" },
   "golden-week": { emoji: "🏆", title: "Golden Week", desc: "7 days under your daily goal" },
-  "marathon-thumb": { emoji: "📜", title: "Marathon Thumb", desc: "Scrolled 1 km in one day" },
+  "marathon-thumb": { emoji: "📜", title: "Marathon Thumb", desc: "Scrolled 1 km in one day. Your thumb needs a rest", dubious: true },
 };
 
 // CSS reference pixel: 96 px per inch -> px per metre.
@@ -267,7 +267,8 @@ function renderAchievements(unlocked) {
   grid.innerHTML = "";
   for (const [id, a] of Object.entries(ACHIEVEMENTS)) {
     const card = document.createElement("div");
-    card.className = "achieve" + (unlocked[id] ? "" : " locked");
+    card.className =
+      "achieve" + (unlocked[id] ? "" : " locked") + (a.dubious ? " dubious" : "");
     const emoji = document.createElement("span");
     emoji.className = "achieve-emoji";
     emoji.textContent = a.emoji;
