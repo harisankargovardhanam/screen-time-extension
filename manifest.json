@@ -1,9 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "Screen Time: Website Tracker, Limits & Focus",
+  "name": "__MSG_appName__",
   "short_name": "Screen Time",
-  "version": "1.0.0",
-  "description": "See where your time goes. Live site timers, daily limits with blocking, focus sessions & insights. 100% private, fully local.",
+  "version": "1.1.0",
+  "description": "__MSG_appDesc__",
+  "default_locale": "en",
   "author": "Harisankar",
   "homepage_url": "https://www.linkedin.com/in/harisankarrpm/",
   "permissions": ["tabs", "storage", "alarms", "notifications", "idle", "favicon"],

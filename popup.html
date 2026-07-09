@@ -17,6 +17,14 @@
           <path d="M4 20V9h4v11zm6 0V4h4v16zm6 0v-7h4v7z" fill="currentColor" />
         </svg>
       </button>
+      <button id="toggle-pause" class="icon-btn" title="Pause tracking" aria-label="Pause or resume tracking">
+        <svg id="pause-icon" viewBox="0 0 24 24" width="18" height="18">
+          <path d="M14 19V5h4v14zm-8 0V5h4v14z" fill="currentColor"/>
+        </svg>
+        <svg id="play-icon" viewBox="0 0 24 24" width="18" height="18" hidden>
+          <path d="M8 19V5l11 7z" fill="currentColor"/>
+        </svg>
+      </button>
       <button id="toggle-settings" class="icon-btn" title="Settings" aria-label="Toggle settings panel">
         <svg viewBox="0 0 24 24" width="18" height="18">
           <path d="m9.25 22-.4-3.2q-.325-.125-.612-.3-.288-.175-.563-.375L4.7 19.375l-2.75-4.75 2.575-1.95Q4.5 12.5 4.5 12.337v-.675q0-.162.025-.337L1.95 9.375l2.75-4.75 2.975 1.25q.275-.2.575-.375.3-.175.6-.3l.4-3.2h5.5l.4 3.2q.325.125.613.3.287.175.562.375l2.975-1.25 2.75 4.75-2.575 1.95q.025.175.025.338v.674q0 .163-.05.338l2.575 1.95-2.75 4.75-2.95-1.25q-.275.2-.575.375-.3.175-.6.3l-.4 3.2zm2.8-6.5q1.45 0 2.475-1.025Q15.55 13.45 15.55 12q0-1.45-1.025-2.475Q13.5 8.5 12.05 8.5q-1.475 0-2.488 1.025Q8.55 10.55 8.55 12q0 1.45 1.012 2.475Q10.575 15.5 12.05 15.5Z" fill="currentColor"/>
@@ -54,6 +62,12 @@
     </div>
   </section>
 
+  <!-- Paused banner -->
+  <div id="paused-banner" class="paused-banner" hidden>
+    <span>Tracking is paused</span>
+    <button id="resume-btn" class="focus-btn">Resume</button>
+  </div>
+
   <!-- Segmented tabs -->
   <nav class="segmented" role="tablist">
     <button class="segment active" data-tab="overview" role="tab" aria-selected="true">Overview</button>
@@ -70,6 +84,10 @@
         <span class="pulse-dot"></span>
         <span id="active-site-name"></span>
       </span>
+      <div id="goal-progress" class="goal-progress" hidden>
+        <div class="goal-track"><div id="goal-fill" class="goal-fill"></div></div>
+        <span id="goal-text" class="goal-text"></span>
+      </div>
     </div>
     <div class="hero-right">
       <div id="week-chart" class="week-chart"></div>
@@ -129,6 +147,10 @@
       <div class="field minutes">
         <input type="number" id="limit-minutes" placeholder=" " min="1" required />
         <label for="limit-minutes">Min</label>
+      </div>
+      <div class="field minutes">
+        <input type="number" id="limit-weekend" placeholder=" " min="1" title="Different limit for weekends (optional)" />
+        <label for="limit-weekend">Wknd</label>
       </div>
       <label class="block-toggle" title="Also block the site when the limit is reached">
         <input type="checkbox" id="limit-block" />

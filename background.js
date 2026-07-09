@@ -35,7 +35,55 @@ const DEFAULT_SETTINGS = {
   snoozeMinutes: 5,
   breakEveryMin: 60, // continuous browsing before a break reminder; 0 = off
   badge: true,
+  dailyGoalMin: 0, // total daily screen-time goal; 0 = off
+  excludedSites: "", // comma-separated domains that are never tracked
 };
+
+// CSS reference pixel: 96 px per inch -> px per metre.
+const PX_PER_METRE = 96 / 0.0254;
+
+const ACHIEVEMENTS = {
+  "fresh-start": { emoji: "🌱", title: "Fresh Start", desc: "Tracked your first day" },
+  "boundary-setter": { emoji: "🚧", title: "Boundary Setter", desc: "Set your first limit" },
+  "deep-diver": { emoji: "🎯", title: "Deep Diver", desc: "Finished a focus session" },
+  "iron-will": { emoji: "🔥", title: "Iron Will", desc: "7-day streak under your limits" },
+  "golden-week": { emoji: "🏆", title: "Golden Week", desc: "7 days under your daily goal" },
+  "marathon-thumb": { emoji: "📜", title: "Marathon Thumb", desc: "Scrolled 1 km in one day" },
+};
+
+async function award(id) {
+  const store = await chrome.storage.local.get("achievements");
+  const achievements = store.achievements || {};
+  if (achievements[id]) return;
+  achievements[id] = Date.now();
+  await chrome.storage.local.set({ achievements });
+  const a = ACHIEVEMENTS[id];
+  if (a) {
+    chrome.notifications.create(`achieve-${id}`, {
+      type: "basic",
+      iconUrl: "icons/icon128.png",
+      title: `Achievement unlocked ${a.emoji}`,
+      message: `${a.title} — ${a.desc}`,
+      priority: 1,
+    });
+  }
+}
+
+function parseExcluded(settings) {
+  return new Set(
+    (settings.excludedSites || "")
+      .split(",")
+      .map((s) => s.trim().toLowerCase().replace(/^www\./, ""))
+      .filter(Boolean)
+  );
+}
+
+// Weekend-aware limit minutes for a given date.
+function effectiveMinutes(limit, date = new Date()) {
+  const day = date.getDay();
+  if ((day === 0 || day === 6) && limit.weekendMinutes) return limit.weekendMinutes;
+  return limit.minutes;
+}
 
 // Common two-part public suffixes so "bbc.co.uk" doesn't collapse to "co.uk".
 const TWO_PART_TLDS = new Set([
@@ -96,52 +144,70 @@ function blockedPageUrl(domain, backUrl, reason) {
 //  - activeDomain: the focused tab's site (for the toolbar badge), or null.
 async function getTrackingState() {
   const settings = await getSettings();
+  const excluded = parseExcluded(settings);
+
+  const pausedStore = await chrome.storage.local.get("paused");
+  if (pausedStore.paused) {
+    return { domains: [], activeDomain: null, paused: true, scrollPx: 0, scrollDomain: null };
+  }
+
   const domains = new Set();
 
   const audibleTabs = await chrome.tabs.query({ audible: true });
   for (const tab of audibleTabs) {
     if (tab.mutedInfo && tab.mutedInfo.muted) continue;
     const d = tab.url && domainFromUrl(tab.url);
-    if (d) domains.add(d);
+    if (d && !excluded.has(d)) domains.add(d);
   }
 
   let activeDomain = null;
+  let scrollPx = 0;
+  let scrollDomain = null;
   const win = await chrome.windows.getLastFocused({ populate: false }).catch(() => null);
   if (win && win.focused) {
     const [tab] = await chrome.tabs.query({ active: true, windowId: win.id });
     if (tab && tab.url) {
       activeDomain = domainFromUrl(tab.url);
-      if (activeDomain && !domains.has(activeDomain)) {
-        // Non-audible foreground tab: needs the system awake and a recent
-        // interaction on the page to count.
-        const idleState = await chrome.idle.queryState(IDLE_DETECTION_SECONDS);
-        if (idleState === "active") {
-          let recentlyUsed = true;
-          try {
-            const res = await chrome.tabs.sendMessage(tab.id, "activity?");
-            if (res && res.idleMs > settings.activityTimeoutSec * 1000) {
-              recentlyUsed = false;
+      if (activeDomain && !excluded.has(activeDomain)) {
+        // Ask the page for interaction recency and scrolled distance.
+        let recentlyUsed = true;
+        try {
+          const res = await chrome.tabs.sendMessage(tab.id, "activity?");
+          if (res) {
+            if (res.idleMs > settings.activityTimeoutSec * 1000) recentlyUsed = false;
+            if (res.scrollPx > 0) {
+              scrollPx = res.scrollPx;
+              scrollDomain = activeDomain;
             }
-          } catch {
-            // Content script not present (tab predates install, PDF...).
-            // Fall back to the system-idle check that already passed above.
           }
-          if (recentlyUsed) domains.add(activeDomain);
+        } catch {
+          // Content script not present (tab predates install, PDF...).
+          // Fall back to the system-idle check below.
         }
+
+        if (!domains.has(activeDomain)) {
+          // Non-audible foreground tab: needs the system awake and a recent
+          // interaction on the page to count.
+          const idleState = await chrome.idle.queryState(IDLE_DETECTION_SECONDS);
+          if (idleState === "active" && recentlyUsed) domains.add(activeDomain);
+        }
+      } else {
+        activeDomain = null;
       }
     }
   }
 
-  return { domains: [...domains], activeDomain };
+  return { domains: [...domains], activeDomain, paused: false, scrollPx, scrollDomain };
 }
 
 // Flush elapsed time for every currently tracked site into today's bucket,
 // then start fresh intervals for `newDomains`.
-async function switchTracking(newDomains, activeDomain) {
+async function switchTracking(newDomains, activeDomain, scrollPx = 0, scrollDomain = null) {
   const now = Date.now();
-  const store = await chrome.storage.local.get(["tracking", "data", "hourly"]);
+  const store = await chrome.storage.local.get(["tracking", "data", "hourly", "scroll"]);
   const data = store.data || {};
   const hourly = store.hourly || {};
+  const scroll = store.scroll || {};
 
   // tracking used to be a single {domain, start} object.
   const previous = Array.isArray(store.tracking)
@@ -167,15 +233,27 @@ async function switchTracking(newDomains, activeDomain) {
     hourly[key][hour] += seconds;
   }
 
+  // Doomscroll meter: accumulate scrolled distance per site per day.
+  if (scrollPx > 0 && scrollDomain) {
+    const key = todayKey();
+    if (!scroll[key]) scroll[key] = {};
+    scroll[key][scrollDomain] = (scroll[key][scrollDomain] || 0) + scrollPx;
+    const dayTotal = Object.values(scroll[key]).reduce((s, v) => s + v, 0);
+    if (dayTotal >= PX_PER_METRE * 1000) award("marathon-thumb");
+  }
+
   pruneOldDays(data);
   pruneOldDays(hourly);
+  pruneOldDays(scroll);
+
+  if (Object.keys(data).length > 0) award("fresh-start");
 
   // Active tab's site first so the popup's "currently browsing" chip shows it.
   const ordered = [...newDomains].sort((a, b) =>
     (b === activeDomain ? 1 : 0) - (a === activeDomain ? 1 : 0)
   );
   const newTracking = ordered.map((domain) => ({ domain, start: now }));
-  await chrome.storage.local.set({ tracking: newTracking, data, hourly });
+  await chrome.storage.local.set({ tracking: newTracking, data, hourly, scroll });
 
   await checkLimits(data);
   await checkBreakReminder(newTracking.length > 0);
@@ -210,14 +288,15 @@ async function checkLimits(data) {
       continue;
     }
 
-    if (spentSeconds < limit.minutes * 60) continue;
+    const minutes = effectiveMinutes(limit);
+    if (spentSeconds < minutes * 60) continue;
 
     if (!notifiedToday.includes(domain)) {
       chrome.notifications.create(`limit-${domain}-${key}`, {
         type: "basic",
         iconUrl: "icons/icon128.png",
         title: "Time limit reached",
-        message: `You have spent over ${limit.minutes} min on ${domain} today.`,
+        message: `You have spent over ${minutes} min on ${domain} today.`,
         priority: 2,
       });
       notifiedToday.push(domain);
@@ -256,7 +335,7 @@ async function blockReason(domain) {
   if (!limit.block) return null;
 
   const spent = ((store.data || {})[todayKey()] || {})[domain] || 0;
-  if (spent < limit.minutes * 60) return null;
+  if (spent < effectiveMinutes(limit) * 60) return null;
 
   const snoozedUntil = (store.snoozes || {})[domain] || 0;
   return Date.now() >= snoozedUntil ? "limit" : null;
@@ -318,8 +397,13 @@ async function updateBadge(activeDomain, data) {
     return;
   }
 
-  // Focus session countdown takes over the badge.
-  const store = await chrome.storage.local.get(["focus", "limits"]);
+  // Paused state takes over the badge.
+  const store = await chrome.storage.local.get(["focus", "limits", "paused"]);
+  if (store.paused) {
+    chrome.action.setBadgeText({ text: "❚❚" });
+    chrome.action.setBadgeBackgroundColor({ color: "#5f6368" });
+    return;
+  }
   if (store.focus && store.focus.until > Date.now()) {
     const left = Math.ceil((store.focus.until - Date.now()) / 60000);
     chrome.action.setBadgeText({ text: `${left}m` });
@@ -349,8 +433,8 @@ async function updateBadge(activeDomain, data) {
 }
 
 async function refresh() {
-  const { domains, activeDomain } = await getTrackingState();
-  await switchTracking(domains, activeDomain);
+  const { domains, activeDomain, scrollPx, scrollDomain } = await getTrackingState();
+  await switchTracking(domains, activeDomain, scrollPx, scrollDomain);
 }
 
 // --- Weekly report ---
@@ -464,6 +548,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === "weekly-report") sendWeeklyReport();
   if (alarm.name === "focus-end") {
     await chrome.storage.local.set({ focus: null });
+    award("deep-diver");
     chrome.notifications.create(`focus-done-${Date.now()}`, {
       type: "basic",
       iconUrl: "icons/icon128.png",

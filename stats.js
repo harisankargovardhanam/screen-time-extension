@@ -28,6 +28,35 @@ const CATEGORY_COLORS = {
 // Weight of each category when computing the productivity score.
 const CATEGORY_WEIGHT = { Work: 1, News: 0.5, Other: 0.5, Video: 0, Social: 0 };
 
+const ACHIEVEMENTS = {
+  "fresh-start": { emoji: "🌱", title: "Fresh Start", desc: "Tracked your first day" },
+  "boundary-setter": { emoji: "🚧", title: "Boundary Setter", desc: "Set your first limit" },
+  "deep-diver": { emoji: "🎯", title: "Deep Diver", desc: "Finished a focus session" },
+  "iron-will": { emoji: "🔥", title: "Iron Will", desc: "7-day streak under your limits" },
+  "golden-week": { emoji: "🏆", title: "Golden Week", desc: "7 days under your daily goal" },
+  "marathon-thumb": { emoji: "📜", title: "Marathon Thumb", desc: "Scrolled 1 km in one day" },
+};
+
+// CSS reference pixel: 96 px per inch -> px per metre.
+const PX_PER_METRE = 96 / 0.0254;
+
+const LANDMARKS = [
+  [55, "the Leaning Tower of Pisa (55 m)"],
+  [93, "the Statue of Liberty (93 m)"],
+  [330, "the Eiffel Tower (330 m)"],
+  [828, "the Burj Khalifa (828 m)"],
+  [8848, "Mount Everest (8,848 m)"],
+];
+
+// Weekend-aware limit minutes for a given date.
+function effectiveMinutes(limit, date = new Date()) {
+  const day = date.getDay();
+  if ((day === 0 || day === 6) && limit.weekendMinutes) return limit.weekendMinutes;
+  return limit.minutes;
+}
+
+let RANGE = 7;
+
 const PALETTE = [
   "#0b57d0", "#e37400", "#146c2e", "#a142f4", "#d93025",
   "#12a4af", "#f538a0", "#616161",
@@ -47,6 +76,30 @@ function formatDuration(seconds) {
   if (h > 0) return `${h}h ${m}m`;
   if (m > 0) return `${m}m`;
   return seconds > 0 ? `${seconds}s` : "0m";
+}
+
+// Live clock format: 4:07, 12:34, 1:02:34
+function formatClock(seconds) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  const pad = (n) => String(n).padStart(2, "0");
+  if (h > 0) return `${h}:${pad(m)}:${pad(s)}`;
+  return `${m}:${pad(s)}`;
+}
+
+// Merge the currently running tracking intervals into today's bucket so
+// numbers on this page are live, not just as of the last flush.
+function mergeLiveIntervals(todayData, rawTracking) {
+  const intervals = Array.isArray(rawTracking) ? rawTracking : rawTracking ? [rawTracking] : [];
+  for (const t of intervals) {
+    if (!t || !t.domain || !t.start) continue;
+    const elapsed = Math.round((Date.now() - t.start) / 1000);
+    if (elapsed > 0 && elapsed < 60 * 60) {
+      todayData[t.domain] = (todayData[t.domain] || 0) + elapsed;
+    }
+  }
+  return todayData;
 }
 
 function faviconUrl(domain, size = 32) {
@@ -75,9 +128,12 @@ function lastNDays(n) {
   return days;
 }
 
+let initialized = false;
+
 async function main() {
   const store = await chrome.storage.local.get([
-    "data", "hourly", "limits", "snoozeLog", "settings",
+    "data", "hourly", "limits", "snoozeLog", "settings", "tracking",
+    "scroll", "achievements",
   ]);
   const data = store.data || {};
   const hourly = store.hourly || {};
@@ -85,28 +141,160 @@ async function main() {
   const snoozeLog = store.snoozeLog || {};
 
   const week = lastNDays(7);
-  const todayData = data[dateKey(new Date())] || {};
+  const todayData = mergeLiveIntervals(
+    { ...(data[dateKey(new Date())] || {}) },
+    store.tracking
+  );
 
-  // Aggregate 7-day totals per site.
+  // Aggregate 7-day totals (summary cards) and current-range totals (chart/table).
   const weekTotals = {};
   for (const day of week) {
     for (const [domain, s] of Object.entries(data[day.key] || {})) {
       weekTotals[domain] = (weekTotals[domain] || 0) + s;
     }
   }
+  const range = lastNDays(RANGE);
+  const rangeTotals = {};
+  for (const day of range) {
+    for (const [domain, s] of Object.entries(data[day.key] || {})) {
+      rangeTotals[domain] = (rangeTotals[domain] || 0) + s;
+    }
+  }
   const rankedSites = Object.entries(weekTotals).sort((a, b) => b[1] - a[1]);
+  const rankedRange = Object.entries(rangeTotals).sort((a, b) => b[1] - a[1]);
 
   renderHeader();
   renderSummary(todayData, weekTotals, data, rankedSites);
   renderCategories(todayData);
   renderProductivity(todayData, data, limits);
-  renderStackedChart(week, data, rankedSites);
+  renderStackedChart(range, data, rankedRange);
+  renderCalendar(data, todayData);
+  renderScrollMeter(store.scroll || {});
+  renderAchievements(store.achievements || {});
   renderHeatmap(hourly[dateKey(new Date())] || []);
   renderLimitsOverview(limits, todayData, snoozeLog);
-  renderTable(rankedSites, todayData, weekTotals);
-  setupSettings(store.settings || {});
+  renderTable(rankedRange, todayData, rangeTotals);
+  checkGoalWeek(data, todayData, (store.settings || {}).dailyGoalMin || 0);
 
-  document.getElementById("export").addEventListener("click", () => exportCsv(data));
+  document.getElementById("range-title").textContent = `Last ${RANGE} days by site`;
+  document.getElementById("table-title").textContent = `All sites — last ${RANGE} days`;
+  document.getElementById("th-total").textContent = `${RANGE}-day total`;
+
+  if (!initialized) {
+    initialized = true;
+    setupSettings(store.settings || {});
+    document.getElementById("export").addEventListener("click", async () => {
+      const fresh = await chrome.storage.local.get("data");
+      exportCsv(fresh.data || {});
+    });
+    for (const btn of document.querySelectorAll(".range-btn")) {
+      btn.addEventListener("click", () => {
+        RANGE = parseInt(btn.dataset.range, 10);
+        for (const b of document.querySelectorAll(".range-btn")) {
+          b.classList.toggle("active", b === btn);
+        }
+        main();
+      });
+    }
+  }
+}
+
+function renderCalendar(data, todayData) {
+  const cal = document.getElementById("calendar");
+  cal.innerHTML = "";
+  const days = lastNDays(35);
+  const totals = days.map((d) =>
+    Object.values((d.isToday ? todayData : data[d.key]) || {}).reduce((s, v) => s + v, 0)
+  );
+  const max = Math.max(...totals, 1);
+
+  // Pad so weeks align in columns (grid flows column-wise, 7 rows).
+  const firstDow = new Date(days[0].key).getDay();
+  for (let i = 0; i < firstDow; i++) {
+    const pad = document.createElement("div");
+    pad.style.visibility = "hidden";
+    cal.appendChild(pad);
+  }
+
+  days.forEach((day, i) => {
+    const cell = document.createElement("div");
+    cell.className = "cal-cell" + (day.isToday ? " today" : "");
+    if (totals[i] > 0) {
+      const intensity = 0.2 + 0.8 * (totals[i] / max);
+      cell.style.background = `color-mix(in srgb, var(--primary) ${Math.round(intensity * 100)}%, var(--surface-variant))`;
+    }
+    cell.title = `${day.key}: ${formatDuration(totals[i])}`;
+    cal.appendChild(cell);
+  });
+}
+
+function renderScrollMeter(scroll) {
+  const todayScroll = scroll[dateKey(new Date())] || {};
+  const totalPx = Object.values(todayScroll).reduce((s, v) => s + v, 0);
+  const metres = totalPx / PX_PER_METRE;
+
+  document.getElementById("scroll-total").textContent =
+    metres >= 1000 ? `${(metres / 1000).toFixed(2)} km` : `${Math.round(metres)} m`;
+
+  const compare = document.getElementById("scroll-compare");
+  const beaten = [...LANDMARKS].reverse().find(([h]) => metres >= h);
+  if (beaten) {
+    compare.textContent = `You've scrolled more than ${beaten[1]} today. 📜`;
+  } else if (metres > 0) {
+    const next = LANDMARKS.find(([h]) => metres < h);
+    compare.textContent = `${Math.round(next[0] - metres)} m to out-scroll ${next[1]}.`;
+  } else {
+    compare.textContent = "No scrolling tracked yet today. Impressive restraint.";
+  }
+
+  const sites = document.getElementById("scroll-sites");
+  sites.innerHTML = "";
+  const top = Object.entries(todayScroll).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  for (const [domain, px] of top) {
+    const row = document.createElement("div");
+    row.className = "scroll-site";
+    const name = document.createElement("span");
+    name.textContent = domain;
+    const val = document.createElement("span");
+    val.textContent = `${Math.round(px / PX_PER_METRE)} m`;
+    row.append(name, val);
+    sites.appendChild(row);
+  }
+}
+
+function renderAchievements(unlocked) {
+  const grid = document.getElementById("achievements");
+  grid.innerHTML = "";
+  for (const [id, a] of Object.entries(ACHIEVEMENTS)) {
+    const card = document.createElement("div");
+    card.className = "achieve" + (unlocked[id] ? "" : " locked");
+    const emoji = document.createElement("span");
+    emoji.className = "achieve-emoji";
+    emoji.textContent = a.emoji;
+    const info = document.createElement("div");
+    const title = document.createElement("div");
+    title.className = "achieve-title";
+    title.textContent = a.title;
+    const desc = document.createElement("div");
+    desc.className = "achieve-desc";
+    desc.textContent = unlocked[id]
+      ? `${a.desc} · ${new Date(unlocked[id]).toLocaleDateString()}`
+      : a.desc;
+    info.append(title, desc);
+    card.append(emoji, info);
+    grid.appendChild(card);
+  }
+}
+
+// Ticks every second: live "Today" total including running intervals.
+async function liveTick() {
+  const store = await chrome.storage.local.get(["data", "tracking"]);
+  const todayData = mergeLiveIntervals(
+    { ...((store.data || {})[dateKey(new Date())] || {}) },
+    store.tracking
+  );
+  const total = Object.values(todayData).reduce((s, v) => s + v, 0);
+  document.getElementById("stat-today").textContent = formatClock(total);
 }
 
 function categoryTotals(todayData) {
@@ -175,6 +363,29 @@ function renderCategories(todayData) {
   }
 }
 
+// Award an achievement from this page (no notification; grid shows it).
+async function awardLocal(id) {
+  const store = await chrome.storage.local.get("achievements");
+  const achievements = store.achievements || {};
+  if (achievements[id]) return;
+  achievements[id] = Date.now();
+  await chrome.storage.local.set({ achievements });
+  renderAchievements(achievements);
+}
+
+// Golden Week: last 7 days each under the daily goal (and tracked).
+function checkGoalWeek(data, todayData, goalMin) {
+  if (!goalMin) return;
+  const days = lastNDays(7);
+  const ok = days.every((d) => {
+    const dayData = d.isToday ? todayData : data[d.key];
+    if (!dayData || Object.keys(dayData).length === 0) return false;
+    const total = Object.values(dayData).reduce((s, v) => s + v, 0);
+    return total < goalMin * 60;
+  });
+  if (ok) awardLocal("golden-week");
+}
+
 function renderProductivity(todayData, data, limits) {
   const totals = categoryTotals(todayData);
   const total = Object.values(totals).reduce((s, v) => s + v, 0);
@@ -231,12 +442,14 @@ function renderProductivity(todayData, data, limits) {
     const day = data[dateKey(d)] || {};
     const underAll = limitEntries.every(([domain, raw]) => {
       const limit = normalizeLimit(raw);
-      return (day[domain] || 0) < limit.minutes * 60;
+      return (day[domain] || 0) < effectiveMinutes(limit, d) * 60;
     });
     if (!underAll) break;
     streak++;
     if (i > 0 && Object.keys(day).length === 0) break; // no data = stop counting
   }
+
+  if (streak >= 7) awardLocal("iron-will");
 
   const el = document.getElementById("streak");
   el.hidden = false;
@@ -249,13 +462,18 @@ function renderProductivity(todayData, data, limits) {
 }
 
 function setupSettings(saved) {
-  const defaults = { activityTimeoutSec: 60, snoozeMinutes: 5, breakEveryMin: 60, badge: true };
+  const defaults = {
+    activityTimeoutSec: 60, snoozeMinutes: 5, breakEveryMin: 60, badge: true,
+    dailyGoalMin: 0, excludedSites: "",
+  };
   const settings = { ...defaults, ...saved };
 
   document.getElementById("set-activity").value = settings.activityTimeoutSec;
   document.getElementById("set-snooze").value = settings.snoozeMinutes;
   document.getElementById("set-break").value = settings.breakEveryMin;
   document.getElementById("set-badge").checked = settings.badge;
+  document.getElementById("set-goal").value = settings.dailyGoalMin;
+  document.getElementById("set-excluded").value = settings.excludedSites;
 
   document.getElementById("save-settings").addEventListener("click", async () => {
     const next = {
@@ -263,8 +481,11 @@ function setupSettings(saved) {
       snoozeMinutes: Math.max(1, parseInt(document.getElementById("set-snooze").value, 10) || 5),
       breakEveryMin: Math.max(0, parseInt(document.getElementById("set-break").value, 10) || 0),
       badge: document.getElementById("set-badge").checked,
+      dailyGoalMin: Math.max(0, parseInt(document.getElementById("set-goal").value, 10) || 0),
+      excludedSites: document.getElementById("set-excluded").value.trim(),
     };
     await chrome.storage.local.set({ settings: next });
+    chrome.runtime.sendMessage("refresh").catch(() => {});
     const saved = document.getElementById("settings-saved");
     saved.hidden = false;
     setTimeout(() => (saved.hidden = true), 2000);
@@ -313,7 +534,7 @@ function renderSummary(todayData, weekTotals, data, rankedSites) {
     (d) => Object.keys(data[d.key] || {}).length > 0
   ).length;
 
-  document.getElementById("stat-today").textContent = formatDuration(todayTotal);
+  document.getElementById("stat-today").textContent = formatClock(todayTotal);
   document.getElementById("stat-week").textContent = formatDuration(weekTotal);
   document.getElementById("stat-avg").textContent = formatDuration(
     activeDays ? Math.round(weekTotal / activeDays) : 0
@@ -349,8 +570,10 @@ function renderStackedChart(week, data, rankedSites) {
 
   const max = Math.max(...stacks.map((s) => s.total), 1);
   const W = 840, H = 200, PAD_BOTTOM = 24, PAD_TOP = 16;
-  const barW = 44;
-  const slot = W / 7;
+  const n = week.length;
+  const slot = W / n;
+  const barW = Math.min(44, slot * 0.72);
+  const labelEvery = n > 10 ? 5 : 1;
 
   const svgNS = "http://www.w3.org/2000/svg";
   const svg = document.createElementNS(svgNS, "svg");
@@ -376,20 +599,22 @@ function renderStackedChart(week, data, rankedSites) {
       svg.appendChild(rect);
     }
 
-    // Day label
-    const label = document.createElementNS(svgNS, "text");
-    label.setAttribute("x", x + barW / 2);
-    label.setAttribute("y", H - 6);
-    label.setAttribute("text-anchor", "middle");
-    label.setAttribute("font-size", "12");
-    label.setAttribute("fill", "currentColor");
-    label.setAttribute("opacity", day.isToday ? "1" : "0.55");
-    label.setAttribute("font-weight", day.isToday ? "600" : "400");
-    label.textContent = day.label;
-    svg.appendChild(label);
+    // Day label (thinned out on long ranges)
+    if (i % labelEvery === 0 || day.isToday) {
+      const label = document.createElementNS(svgNS, "text");
+      label.setAttribute("x", x + barW / 2);
+      label.setAttribute("y", H - 6);
+      label.setAttribute("text-anchor", "middle");
+      label.setAttribute("font-size", "12");
+      label.setAttribute("fill", "currentColor");
+      label.setAttribute("opacity", day.isToday ? "1" : "0.55");
+      label.setAttribute("font-weight", day.isToday ? "600" : "400");
+      label.textContent = n > 10 ? day.key.slice(8) : day.label;
+      svg.appendChild(label);
+    }
 
-    // Total above bar
-    if (day.total > 0) {
+    // Total above bar (only on short ranges where it fits)
+    if (day.total > 0 && n <= 10) {
       const totalLabel = document.createElementNS(svgNS, "text");
       totalLabel.setAttribute("x", x + barW / 2);
       totalLabel.setAttribute("y", Math.max(y - 5, 11));
@@ -451,8 +676,9 @@ function renderLimitsOverview(limits, todayData, snoozeLog = {}) {
 
   for (const [domain, raw] of entries) {
     const limit = normalizeLimit(raw);
+    const minutes = effectiveMinutes(limit);
     const spent = todayData[domain] || 0;
-    const fraction = spent / (limit.minutes * 60);
+    const fraction = spent / (minutes * 60);
     const over = fraction >= 1;
 
     const line = document.createElement("div");
@@ -468,7 +694,7 @@ function renderLimitsOverview(limits, todayData, snoozeLog = {}) {
       (snoozeCount > 0 ? ` · snoozed ${snoozeCount}× today` : "");
     const used = document.createElement("span");
     used.className = "used" + (over ? " over" : "");
-    used.textContent = `${formatDuration(spent)} / ${limit.minutes}m`;
+    used.textContent = `${formatDuration(spent)} / ${minutes}m`;
     top.append(name, used);
 
     const track = document.createElement("div");
@@ -510,7 +736,7 @@ function renderTable(rankedSites, todayData, weekTotals) {
 
     const avgTd = document.createElement("td");
     avgTd.className = "num";
-    avgTd.textContent = formatDuration(Math.round(total / 7));
+    avgTd.textContent = formatDuration(Math.round(total / RANGE));
 
     const share = (total / weekTotal) * 100;
     const shareTd = document.createElement("td");
@@ -548,3 +774,5 @@ function exportCsv(data) {
 }
 
 main();
+setInterval(liveTick, 1000);
+setInterval(main, 60000);

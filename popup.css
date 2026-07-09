@@ -106,6 +106,55 @@ body {
   color: var(--on-primary-container);
 }
 
+/* ---------- Paused banner ---------- */
+.paused-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--error-container);
+  color: var(--on-error-container);
+  border-radius: var(--radius-sm);
+  padding: 8px 8px 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+/* ---------- Goal progress ---------- */
+.goal-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  max-width: 190px;
+}
+
+.goal-track {
+  flex: 1;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--surface-container);
+  overflow: hidden;
+}
+
+.goal-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--primary);
+  transition: width 0.4s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.goal-fill.over {
+  background: var(--error);
+}
+
+.goal-text {
+  font-size: 10px;
+  color: var(--on-surface-variant);
+  white-space: nowrap;
+}
+
 /* ---------- Segmented tabs ---------- */
 .segmented {
   display: grid;
@@ -644,7 +693,7 @@ h2 {
 }
 
 .field.minutes {
-  width: 64px;
+  width: 54px;
 }
 
 .field input {

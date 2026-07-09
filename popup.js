@@ -58,6 +58,13 @@ function normalizeLimit(value) {
   return value;
 }
 
+// Weekend-aware limit minutes for a given date.
+function effectiveMinutes(limit, date = new Date()) {
+  const day = date.getDay();
+  if ((day === 0 || day === 6) && limit.weekendMinutes) return limit.weekendMinutes;
+  return limit.minutes;
+}
+
 function faviconUrl(domain, size = 32) {
   const url = new URL(chrome.runtime.getURL("/_favicon/"));
   url.searchParams.set("pageUrl", `https://${domain}/`);
@@ -66,7 +73,9 @@ function faviconUrl(domain, size = 32) {
 }
 
 async function render() {
-  const store = await chrome.storage.local.get(["data", "limits", "tracking", "focus", "snoozeLog"]);
+  const store = await chrome.storage.local.get([
+    "data", "limits", "tracking", "focus", "snoozeLog", "paused", "settings",
+  ]);
   const data = store.data || {};
   const limits = store.limits || {};
   const todayData = { ...(data[todayKey()] || {}) };
@@ -89,7 +98,8 @@ async function render() {
     .join(" · ");
 
   renderHeader();
-  renderHero(todayData, data, chipLabel);
+  renderPaused(store.paused);
+  renderHero(todayData, data, chipLabel, store.settings || {});
   renderFocus(store.focus);
   renderChart(todayData, limits);
   renderLimits(limits, todayData, store.snoozeLog || {});
@@ -116,9 +126,29 @@ function renderHeader() {
   );
 }
 
-function renderHero(todayData, data, activeDomain) {
+function renderPaused(paused) {
+  document.getElementById("paused-banner").hidden = !paused;
+  document.getElementById("pause-icon").hidden = !!paused;
+  document.getElementById("play-icon").hidden = !paused;
+  document.getElementById("toggle-pause").title = paused ? "Resume tracking" : "Pause tracking";
+}
+
+function renderHero(todayData, data, activeDomain, settings = {}) {
   const totalSeconds = Object.values(todayData).reduce((s, v) => s + v, 0);
   document.getElementById("total").textContent = formatClock(totalSeconds);
+
+  // Daily goal progress
+  const goalMin = settings.dailyGoalMin || 0;
+  const goalWrap = document.getElementById("goal-progress");
+  goalWrap.hidden = !goalMin;
+  if (goalMin) {
+    const fraction = totalSeconds / (goalMin * 60);
+    const fill = document.getElementById("goal-fill");
+    fill.style.width = `${Math.min(fraction, 1) * 100}%`;
+    fill.classList.toggle("over", fraction >= 1);
+    document.getElementById("goal-text").textContent =
+      fraction >= 1 ? "over goal" : `goal ${goalMin}m`;
+  }
 
   // Active-site chip
   const chip = document.getElementById("active-site");
@@ -188,7 +218,7 @@ function renderChart(todayData, limits) {
       fill.style.transition = "none";
       fill.style.width = `${Math.max(2, (seconds / max) * 100)}%`;
       const limit = limits[domain] && normalizeLimit(limits[domain]);
-      fill.classList.toggle("over-limit", !!(limit && seconds >= limit.minutes * 60));
+      fill.classList.toggle("over-limit", !!(limit && seconds >= effectiveMinutes(limit) * 60));
     });
     return;
   }
@@ -222,7 +252,7 @@ function renderChart(todayData, limits) {
     const fill = document.createElement("div");
     fill.className = "site-fill";
     const limit = limits[domain] && normalizeLimit(limits[domain]);
-    if (limit && seconds >= limit.minutes * 60) {
+    if (limit && seconds >= effectiveMinutes(limit) * 60) {
       fill.classList.add("over-limit");
     }
     track.appendChild(fill);
@@ -262,10 +292,12 @@ function progressRing(fraction, over) {
 
 function renderLimits(limits, todayData, snoozeLog = {}) {
   const snoozedToday = snoozeLog[todayKey()] || {};
-  const usageText = (domain, spent, minutes, over) => {
+  const usageText = (domain, spent, limit, over) => {
+    const minutes = effectiveMinutes(limit);
     let text = over
       ? `Over limit — ${formatClock(spent)} of ${minutes}m`
       : `${formatClock(spent)} of ${minutes}m`;
+    if (limit.weekendMinutes) text += ` · wknd ${limit.weekendMinutes}m`;
     const count = snoozedToday[domain] || 0;
     if (count > 0) text += ` · snoozed ${count}×`;
     return text;
@@ -280,7 +312,7 @@ function renderLimits(limits, todayData, snoozeLog = {}) {
   const sig = entries
     .map(([d, raw]) => {
       const l = normalizeLimit(raw);
-      return `${d}:${l.minutes}:${l.block ? 1 : 0}`;
+      return `${d}:${l.minutes}:${l.weekendMinutes || 0}:${l.block ? 1 : 0}`;
     })
     .join("|");
   if (sig === lastLimitsSig && sig !== "") {
@@ -290,11 +322,11 @@ function renderLimits(limits, todayData, snoozeLog = {}) {
       if (!row) return;
       const limit = normalizeLimit(raw);
       const spent = todayData[domain] || 0;
-      const fraction = spent / (limit.minutes * 60);
+      const fraction = spent / (effectiveMinutes(limit) * 60);
       const over = fraction >= 1;
       const usage = row.querySelector(".limit-usage");
       usage.className = "limit-usage" + (over ? " over" : "");
-      usage.textContent = usageText(domain, spent, limit.minutes, over);
+      usage.textContent = usageText(domain, spent, limit, over);
       row.querySelector(".ring").replaceWith(progressRing(fraction, over));
     });
     return;
@@ -304,9 +336,8 @@ function renderLimits(limits, todayData, snoozeLog = {}) {
 
   for (const [domain, raw] of entries) {
     const limit = normalizeLimit(raw);
-    const minutes = limit.minutes;
     const spent = todayData[domain] || 0;
-    const fraction = spent / (minutes * 60);
+    const fraction = spent / (effectiveMinutes(limit) * 60);
     const over = fraction >= 1;
 
     const row = document.createElement("div");
@@ -332,7 +363,7 @@ function renderLimits(limits, todayData, snoozeLog = {}) {
     }
     const usage = document.createElement("span");
     usage.className = "limit-usage" + (over ? " over" : "");
-    usage.textContent = usageText(domain, spent, minutes, over);
+    usage.textContent = usageText(domain, spent, limit, over);
     info.append(name, usage);
 
     const ring = progressRing(fraction, over);
@@ -362,21 +393,45 @@ document.getElementById("limit-form").addEventListener("submit", async (e) => {
   const minutesInput = document.getElementById("limit-minutes");
 
   const blockInput = document.getElementById("limit-block");
+  const weekendInput = document.getElementById("limit-weekend");
 
   const domain = normalizeDomain(domainInput.value);
   const minutes = parseInt(minutesInput.value, 10);
   if (!domain || !minutes || minutes < 1) return;
+  const weekendMinutes = parseInt(weekendInput.value, 10);
 
-  const store = await chrome.storage.local.get("limits");
+  const store = await chrome.storage.local.get(["limits", "achievements"]);
   const limits = store.limits || {};
   limits[domain] = { minutes, block: blockInput.checked };
-  await chrome.storage.local.set({ limits });
+  if (weekendMinutes >= 1) limits[domain].weekendMinutes = weekendMinutes;
+
+  const achievements = store.achievements || {};
+  if (!achievements["boundary-setter"]) {
+    achievements["boundary-setter"] = Date.now();
+  }
+  await chrome.storage.local.set({ limits, achievements });
 
   domainInput.value = "";
   minutesInput.value = "";
+  weekendInput.value = "";
   blockInput.checked = false;
   render();
 });
+
+// --- Pause / resume tracking ---
+
+async function setPaused(paused) {
+  await chrome.storage.local.set({ paused });
+  chrome.runtime.sendMessage("refresh").catch(() => {});
+  render();
+}
+
+document.getElementById("toggle-pause").addEventListener("click", async () => {
+  const store = await chrome.storage.local.get("paused");
+  setPaused(!store.paused);
+});
+
+document.getElementById("resume-btn").addEventListener("click", () => setPaused(false));
 
 document.getElementById("open-stats").addEventListener("click", () => {
   chrome.tabs.create({ url: chrome.runtime.getURL("stats.html") });

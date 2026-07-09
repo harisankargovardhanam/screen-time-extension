@@ -70,13 +70,47 @@
       </section>
     </div>
 
-    <!-- Weekly stacked chart -->
+    <!-- Stacked chart with range switcher -->
     <section class="card">
       <div class="card-header">
-        <h2>Last 7 days by site</h2>
+        <h2 id="range-title">Last 7 days by site</h2>
+        <div class="range-toggle">
+          <button class="range-btn active" data-range="7">7d</button>
+          <button class="range-btn" data-range="30">30d</button>
+        </div>
       </div>
       <div id="stacked-chart"></div>
       <div id="legend" class="legend"></div>
+    </section>
+
+    <div class="two-col">
+      <!-- Monthly calendar heatmap -->
+      <section class="card">
+        <div class="card-header">
+          <h2>Last 5 weeks</h2>
+        </div>
+        <div id="calendar" class="calendar"></div>
+      </section>
+
+      <!-- Doomscroll meter -->
+      <section class="card">
+        <div class="card-header">
+          <h2>Doomscroll meter</h2>
+        </div>
+        <div class="scroll-meter">
+          <span id="scroll-total" class="scroll-value">0 m</span>
+          <p id="scroll-compare" class="hint"></p>
+          <div id="scroll-sites" class="scroll-sites"></div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Achievements -->
+    <section class="card">
+      <div class="card-header">
+        <h2>Achievements</h2>
+      </div>
+      <div id="achievements" class="achievements"></div>
     </section>
 
     <div class="two-col">
@@ -104,14 +138,14 @@
     <!-- Per-site table -->
     <section class="card">
       <div class="card-header">
-        <h2>All sites — last 7 days</h2>
+        <h2 id="table-title">All sites — last 7 days</h2>
       </div>
       <table id="site-table">
         <thead>
           <tr>
             <th>Site</th>
             <th class="num">Today</th>
-            <th class="num">7-day total</th>
+            <th class="num" id="th-total">7-day total</th>
             <th class="num">Avg/day</th>
             <th class="num">Share</th>
           </tr>
@@ -144,6 +178,16 @@
           <span>Toolbar badge</span>
           <input type="checkbox" id="set-badge" />
           <small>Show time on the extension icon.</small>
+        </label>
+        <label class="setting">
+          <span>Daily goal (minutes)</span>
+          <input type="number" id="set-goal" min="0" max="1440" />
+          <small>Total screen-time target per day. 0 turns it off.</small>
+        </label>
+        <label class="setting">
+          <span>Excluded sites</span>
+          <input type="text" id="set-excluded" placeholder="work.com, docs.google.com" />
+          <small>Comma-separated sites that are never tracked.</small>
         </label>
       </div>
       <div class="settings-actions">
