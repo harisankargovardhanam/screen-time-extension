@@ -74,7 +74,7 @@ function faviconUrl(domain, size = 32) {
 
 async function render() {
   const store = await chrome.storage.local.get([
-    "data", "limits", "tracking", "focus", "snoozeLog", "paused", "settings",
+    "data", "limits", "tracking", "focus", "snoozeLog", "paused", "settings", "scroll",
   ]);
   const data = store.data || {};
   const limits = store.limits || {};
@@ -100,6 +100,7 @@ async function render() {
   renderHeader();
   renderPaused(store.paused);
   renderHero(todayData, data, chipLabel, store.settings || {});
+  renderScrollLine(store.scroll || {});
   renderFocus(store.focus);
   renderChart(todayData, limits);
   renderLimits(limits, todayData, store.snoozeLog || {});
@@ -124,6 +125,21 @@ function renderHeader() {
     undefined,
     { weekday: "short", month: "short", day: "numeric" }
   );
+}
+
+// CSS reference pixel: 96 px per inch -> px per metre.
+const PX_PER_METRE = 96 / 0.0254;
+
+function renderScrollLine(scroll) {
+  const todayScroll = scroll[todayKey()] || {};
+  const totalPx = Object.values(todayScroll).reduce((s, v) => s + v, 0);
+  const metres = totalPx / PX_PER_METRE;
+  const line = document.getElementById("scroll-line");
+  line.hidden = metres < 1;
+  if (metres >= 1) {
+    const pretty = metres >= 1000 ? `${(metres / 1000).toFixed(2)} km` : `${Math.round(metres)} m`;
+    line.textContent = `📜 ${pretty} scrolled`;
+  }
 }
 
 function renderPaused(paused) {
@@ -514,6 +530,9 @@ document.getElementById("save-settings").addEventListener("click", async () => {
   saved.hidden = false;
   setTimeout(() => (saved.hidden = true), 2000);
 });
+
+// Ask the background to flush tracking + scroll data so the popup opens fresh.
+chrome.runtime.sendMessage("refresh").catch(() => {});
 
 render();
 setInterval(render, 1000);
