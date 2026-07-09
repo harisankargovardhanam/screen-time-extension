@@ -25,19 +25,30 @@ device: no accounts, no servers, no tracking. Ever.
 • Per-site timers with second precision, visible right in the toolbar badge
 • Smart activity detection: only counts when you actually use a page
 • Background music and videos keep counting — idle tabs don't
+• Pause tracking anytime; exclude sites you never want counted
+
+📜 DOOMSCROLL METER — only Screen Time has this
+• Measures how far you physically scroll, in metres
+• "You've scrolled more than the Eiffel Tower (330 m) today"
+• Landmarks from the Leaning Tower of Pisa to Mount Everest
+• Scroll 1 km in a day and earn the Marathon Thumb badge of shame
 
 🚦 DAILY LIMITS
 • Set a minute budget per site (e.g. YouTube: 30 min/day)
+• Separate weekend limits — stricter weekdays, relaxed Sundays
 • Notification when you cross the line
 • Optional hard block with a "Time's up" page — plus an honest snooze button
   that counts how many times you cave
 
-🎯 FOCUS SESSIONS
+🎯 FOCUS SESSIONS & GOALS
 • One click blocks all limited sites for 25 or 50 minutes
 • Countdown on the badge, celebration when you finish
+• Daily screen-time goal with a live progress bar
+• Achievements for real wins: streaks, focus sessions, weeks under goal
 
 📊 INSIGHTS DASHBOARD
-• 7-day stacked charts, top sites, hour-by-hour heatmap
+• 7-day and 30-day stacked charts, top sites, hour-by-hour heatmap
+• Monthly calendar heatmap of your browsing intensity
 • Categories (Video, Social, Work, News) with a daily productivity score
 • Streak tracking for days under your limits
 • Export everything to CSV or JSON — it's your data
@@ -52,7 +63,8 @@ device: no accounts, no servers, no tracking. Ever.
 • Only domains are stored (youtube.com), never full URLs
 • No page content is read, no analytics, no third parties
 
-Light and dark theme. Built lean: no frameworks, no bloat.
+Light and dark theme. Available in English, Español, हिन्दी, Deutsch and
+Français. Built lean: no frameworks, no bloat.
 ```
 
 ## Category
