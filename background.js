@@ -278,13 +278,14 @@ async function checkLimits(data) {
   const focusActive = store.focus && store.focus.until > Date.now();
 
   let changed = false;
+  const toBlock = new Map(); // domain -> reason
   for (const [domain, raw] of Object.entries(limits)) {
     const limit = normalizeLimit(raw);
     const spentSeconds = todayData[domain] || 0;
 
     // During a focus session every limited site is blocked outright.
     if (focusActive) {
-      await blockOpenTabs(domain, "focus");
+      toBlock.set(domain, "focus");
       continue;
     }
 
@@ -304,9 +305,11 @@ async function checkLimits(data) {
     }
 
     if (limit.block && Date.now() >= (snoozes[domain] || 0)) {
-      await blockOpenTabs(domain, "limit");
+      toBlock.set(domain, "limit");
     }
   }
+
+  await blockOpenTabs(toBlock);
 
   if (changed) {
     // Keep only today's notified list; old days are irrelevant.
@@ -314,11 +317,15 @@ async function checkLimits(data) {
   }
 }
 
-async function blockOpenTabs(domain, reason) {
+// One pass over all tabs for every blocked domain, not one query per domain.
+async function blockOpenTabs(toBlock) {
+  if (toBlock.size === 0) return;
   const tabs = await chrome.tabs.query({});
   for (const tab of tabs) {
-    if (tab.url && domainFromUrl(tab.url) === domain) {
-      chrome.tabs.update(tab.id, { url: blockedPageUrl(domain, tab.url, reason) });
+    if (!tab.url) continue;
+    const domain = domainFromUrl(tab.url);
+    if (domain && toBlock.has(domain)) {
+      chrome.tabs.update(tab.id, { url: blockedPageUrl(domain, tab.url, toBlock.get(domain)) });
     }
   }
 }
@@ -432,9 +439,37 @@ async function updateBadge(activeDomain, data) {
   chrome.action.setBadgeBackgroundColor({ color });
 }
 
+// Refresh is debounced and serialized: browser events arrive in bursts
+// (rapid tab switching, audible flapping), and each refresh does several
+// storage reads/writes. Overlapping runs would race each other and burn CPU.
+let refreshTimer = null;
+let refreshRunning = false;
+let refreshQueued = false;
+
+function scheduleRefresh() {
+  if (refreshTimer) return;
+  refreshTimer = setTimeout(() => {
+    refreshTimer = null;
+    refresh();
+  }, 300);
+}
+
 async function refresh() {
-  const { domains, activeDomain, scrollPx, scrollDomain } = await getTrackingState();
-  await switchTracking(domains, activeDomain, scrollPx, scrollDomain);
+  if (refreshRunning) {
+    refreshQueued = true;
+    return;
+  }
+  refreshRunning = true;
+  try {
+    const { domains, activeDomain, scrollPx, scrollDomain } = await getTrackingState();
+    await switchTracking(domains, activeDomain, scrollPx, scrollDomain);
+  } finally {
+    refreshRunning = false;
+    if (refreshQueued) {
+      refreshQueued = false;
+      scheduleRefresh();
+    }
+  }
 }
 
 // --- Weekly report ---
@@ -564,12 +599,12 @@ chrome.runtime.onMessage.addListener((msg) => {
   if (msg === "refresh") refresh();
 });
 
-chrome.tabs.onActivated.addListener(() => refresh());
+chrome.tabs.onActivated.addListener(() => scheduleRefresh());
 
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   // A tab started or stopped playing sound - re-evaluate what to track.
   if ("audible" in changeInfo) {
-    refresh();
+    scheduleRefresh();
     return;
   }
 
@@ -585,9 +620,9 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     }
   }
 
-  if (tab.active) refresh();
+  if (tab.active) scheduleRefresh();
 });
 
-chrome.windows.onFocusChanged.addListener(() => refresh());
+chrome.windows.onFocusChanged.addListener(() => scheduleRefresh());
 
-chrome.idle.onStateChanged.addListener(() => refresh());
+chrome.idle.onStateChanged.addListener(() => scheduleRefresh());

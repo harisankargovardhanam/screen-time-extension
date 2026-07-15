@@ -457,6 +457,13 @@ document.getElementById("view-all").addEventListener("click", () => {
   chrome.tabs.create({ url: chrome.runtime.getURL("stats.html") });
 });
 
+document.getElementById("rate-link").addEventListener("click", (e) => {
+  e.preventDefault();
+  chrome.tabs.create({
+    url: `https://chromewebstore.google.com/detail/${chrome.runtime.id}/reviews`,
+  });
+});
+
 // --- Segmented tabs ---
 
 function switchTab(name) {
