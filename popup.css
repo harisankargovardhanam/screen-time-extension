@@ -149,7 +149,8 @@ body {
   height: 100%;
   border-radius: 999px;
   background: var(--primary);
-  transition: width 0.4s cubic-bezier(0.2, 0, 0, 1);
+  width: 0;
+  transition: width 0.9s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .goal-fill.over {
@@ -356,7 +357,7 @@ h2 {
   background: var(--primary);
   opacity: 0.35;
   min-height: 3px;
-  transition: height 0.4s cubic-bezier(0.2, 0, 0, 1);
+  transition: height 0.8s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .week-bar.today {
@@ -427,7 +428,7 @@ h2 {
   border-radius: 999px;
   background: var(--primary);
   width: 0;
-  transition: width 0.5s cubic-bezier(0.2, 0, 0, 1);
+  transition: width 0.9s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .site-fill.over-limit {
@@ -659,7 +660,7 @@ h2 {
   stroke-linecap: round;
   transform: rotate(-90deg);
   transform-origin: center;
-  transition: stroke-dashoffset 0.5s cubic-bezier(0.2, 0, 0, 1);
+  transition: stroke-dashoffset 0.9s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .ring.over .ring-val {

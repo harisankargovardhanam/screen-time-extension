@@ -160,7 +160,15 @@ function renderHero(todayData, data, activeDomain, settings = {}) {
   if (goalMin) {
     const fraction = totalSeconds / (goalMin * 60);
     const fill = document.getElementById("goal-fill");
-    fill.style.width = `${Math.min(fraction, 1) * 100}%`;
+    const target = `${Math.min(fraction, 1) * 100}%`;
+    if (firstRender) {
+      fill.style.width = "0%";
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => { fill.style.width = target; })
+      );
+    } else {
+      fill.style.width = target;
+    }
     fill.classList.toggle("over", fraction >= 1);
     document.getElementById("goal-text").textContent =
       fraction >= 1 ? "over goal" : `goal ${goalMin}m`;

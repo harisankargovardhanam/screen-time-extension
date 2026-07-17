@@ -323,6 +323,7 @@ h2 {
   height: 100%;
   border-radius: 999px;
   background: var(--primary);
+  transition: width 0.9s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .limit-fill.over { background: var(--error); }
@@ -656,4 +657,5 @@ th.num, td.num {
   height: 100%;
   background: var(--primary);
   border-radius: 999px;
+  transition: width 0.9s cubic-bezier(0.16, 1, 0.3, 1);
 }

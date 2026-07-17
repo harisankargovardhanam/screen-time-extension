@@ -734,7 +734,15 @@ function renderLimitsOverview(limits, todayData, snoozeLog = {}) {
     track.className = "limit-track";
     const fill = document.createElement("div");
     fill.className = "limit-fill" + (over ? " over" : "");
-    fill.style.width = `${Math.min(fraction, 1) * 100}%`;
+    const fillTarget = `${Math.min(fraction, 1) * 100}%`;
+    if (animating()) {
+      fill.style.width = "0%";
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => { fill.style.width = fillTarget; })
+      );
+    } else {
+      fill.style.width = fillTarget;
+    }
     track.appendChild(fill);
 
     line.append(top, track);
@@ -779,8 +787,16 @@ function renderTable(rankedSites, todayData, weekTotals) {
     track.className = "share-track";
     const fill = document.createElement("span");
     fill.className = "share-fill";
-    fill.style.width = `${share}%`;
     fill.style.display = "block";
+    if (animating()) {
+      fill.style.width = "0%";
+      const shareTarget = `${share}%`;
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => { fill.style.width = shareTarget; })
+      );
+    } else {
+      fill.style.width = `${share}%`;
+    }
     track.appendChild(fill);
     shareTd.appendChild(track);
 
