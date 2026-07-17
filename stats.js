@@ -262,7 +262,7 @@ function renderScrollMeter(scroll) {
     document.getElementById("scroll-total"),
     Math.round(metres),
     (v) => (v >= 1000 ? `${(v / 1000).toFixed(2)} km` : `${v} m`),
-    900
+    1400
   );
 
   const compare = document.getElementById("scroll-compare");
@@ -374,7 +374,7 @@ function renderCategories(todayData) {
       arc.setAttribute("stroke-dasharray", animating() ? `0 ${C}` : `${pct} ${C - pct}`);
       arc.setAttribute("stroke-dashoffset", offset);
       if (animating()) {
-        arc.style.transition = "stroke-dasharray 0.7s cubic-bezier(0.2, 0, 0, 1)";
+        arc.style.transition = "stroke-dasharray 1.1s cubic-bezier(0.16, 1, 0.3, 1)";
         const target = `${pct} ${C - pct}`;
         requestAnimationFrame(() =>
           requestAnimationFrame(() => arc.setAttribute("stroke-dasharray", target))
@@ -463,7 +463,7 @@ function renderProductivity(todayData, data, limits) {
   val.setAttribute("stroke-dasharray", animating() ? `0 ${C}` : `${score} ${C - score}`);
   val.setAttribute("stroke-dashoffset", 25);
   if (animating()) {
-    val.style.transition = "stroke-dasharray 0.7s cubic-bezier(0.2, 0, 0, 1)";
+    val.style.transition = "stroke-dasharray 1.1s cubic-bezier(0.16, 1, 0.3, 1)";
     const targetDash = `${score} ${C - score}`;
     requestAnimationFrame(() =>
       requestAnimationFrame(() => val.setAttribute("stroke-dasharray", targetDash))
@@ -480,7 +480,7 @@ function renderProductivity(todayData, data, limits) {
   text.setAttribute("fill", "currentColor");
   text.textContent = total > 0 ? "0" : "—";
   svg.appendChild(text);
-  if (total > 0) countUp(text, score, (v) => String(v), 800);
+  if (total > 0) countUp(text, score, (v) => String(v), 1200);
 
   document.getElementById("score-ring").replaceChildren(svg);
 
@@ -588,13 +588,13 @@ function renderSummary(todayData, weekTotals, data, rankedSites) {
     (d) => Object.keys(data[d.key] || {}).length > 0
   ).length;
 
-  countUp(document.getElementById("stat-today"), todayTotal, formatClock);
-  countUp(document.getElementById("stat-week"), weekTotal, formatDuration, 850);
+  countUp(document.getElementById("stat-today"), todayTotal, formatClock, 1100);
+  countUp(document.getElementById("stat-week"), weekTotal, formatDuration, 1300);
   countUp(
     document.getElementById("stat-avg"),
     activeDays ? Math.round(weekTotal / activeDays) : 0,
     formatDuration,
-    850
+    1300
   );
   document.getElementById("stat-top").textContent = rankedSites.length
     ? rankedSites[0][0]
@@ -875,6 +875,12 @@ document.getElementById("rate-link").addEventListener("click", (e) => {
     url: `https://chromewebstore.google.com/detail/${chrome.runtime.id}/reviews`,
   });
 });
+
+// Entrance animations are gated on body.ready so their clocks start at the
+// first painted frame, not while the tab is still invisible.
+requestAnimationFrame(() =>
+  requestAnimationFrame(() => document.body.classList.add("ready"))
+);
 
 main();
 setInterval(liveTick, 1000);

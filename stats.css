@@ -46,6 +46,10 @@
     animation: none !important;
     transition: none !important;
   }
+  .card, .page-header, .animate-row,
+  .cal-cell.animate, .heat-cell.animate, .achieve.animate {
+    opacity: 1 !important;
+  }
 }
 
 @keyframes card-in {
@@ -76,11 +80,19 @@
 
 /* Staggered entrance for list-ish content; delay set inline from JS. */
 .animate-row {
-  animation: row-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+  opacity: 0;
+}
+
+body.ready .animate-row {
+  animation: row-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .page-header {
-  animation: card-in 0.35s cubic-bezier(0.2, 0, 0, 1) both;
+  opacity: 0;
+}
+
+body.ready .page-header {
+  animation: card-in 0.5s cubic-bezier(0.2, 0, 0, 1) both;
 }
 
 body {
@@ -158,8 +170,12 @@ h1 {
   box-shadow: var(--shadow);
   padding: 20px;
   margin-bottom: 16px;
-  animation: card-in 0.35s cubic-bezier(0.2, 0, 0, 1) both;
+  opacity: 0;
   transition: box-shadow 0.2s, transform 0.2s;
+}
+
+body.ready .card {
+  animation: card-in 0.55s cubic-bezier(0.2, 0, 0, 1) both;
 }
 
 .card:hover {
@@ -177,17 +193,30 @@ h1 {
 
 .cal-cell.animate,
 .heat-cell.animate {
-  animation: cell-in 0.3s cubic-bezier(0.2, 0, 0, 1) both;
+  opacity: 0;
+}
+
+body.ready .cal-cell.animate,
+body.ready .heat-cell.animate {
+  animation: cell-in 0.45s cubic-bezier(0.2, 0, 0, 1) both;
 }
 
 #stacked-chart rect.grow {
   transform-box: fill-box;
   transform-origin: center bottom;
-  animation: bar-grow 0.5s cubic-bezier(0.2, 0, 0, 1) both;
+  transform: scaleY(0);
+}
+
+body.ready #stacked-chart rect.grow {
+  animation: bar-grow 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .achieve:not(.locked).animate {
-  animation: achieve-pop 0.4s cubic-bezier(0.2, 0, 0, 1) both;
+  opacity: 0;
+}
+
+body.ready .achieve:not(.locked).animate {
+  animation: achieve-pop 0.55s cubic-bezier(0.2, 0, 0, 1) both;
 }
 
 .achieve {
@@ -337,7 +366,7 @@ h2 {
   height: 100%;
   border-radius: 999px;
   background: var(--primary);
-  transition: width 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: width 1.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .limit-fill.over { background: var(--error); }
@@ -671,5 +700,5 @@ th.num, td.num {
   height: 100%;
   background: var(--primary);
   border-radius: 999px;
-  transition: width 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: width 1.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
