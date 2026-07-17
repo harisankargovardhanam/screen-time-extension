@@ -131,6 +131,24 @@ function lastNDays(n) {
 let initialized = false;
 // Animate charts only on the very first render, not on 60s refreshes.
 const animating = () => !initialized;
+// One-shot: replay the stacked-chart animation on a range switch.
+let chartAnimateOnce = false;
+
+// Animate a number from 0 to `value`, formatting each frame.
+function countUp(el, value, fmt, duration = 700) {
+  if (!animating() || value <= 0) {
+    el.textContent = fmt(value);
+    return;
+  }
+  const start = performance.now();
+  const step = (t) => {
+    const p = Math.min((t - start) / duration, 1);
+    const eased = 1 - Math.pow(1 - p, 3); // ease-out cubic
+    el.textContent = fmt(Math.round(value * eased));
+    if (p < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
 
 async function main() {
   const store = await chrome.storage.local.get([
@@ -192,6 +210,7 @@ async function main() {
     for (const btn of document.querySelectorAll(".range-btn")) {
       btn.addEventListener("click", () => {
         RANGE = parseInt(btn.dataset.range, 10);
+        chartAnimateOnce = true;
         for (const b of document.querySelectorAll(".range-btn")) {
           b.classList.toggle("active", b === btn);
         }
@@ -239,8 +258,12 @@ function renderScrollMeter(scroll) {
   const totalPx = Object.values(todayScroll).reduce((s, v) => s + v, 0);
   const metres = totalPx / PX_PER_METRE;
 
-  document.getElementById("scroll-total").textContent =
-    metres >= 1000 ? `${(metres / 1000).toFixed(2)} km` : `${Math.round(metres)} m`;
+  countUp(
+    document.getElementById("scroll-total"),
+    Math.round(metres),
+    (v) => (v >= 1000 ? `${(v / 1000).toFixed(2)} km` : `${v} m`),
+    900
+  );
 
   const compare = document.getElementById("scroll-compare");
   const beaten = [...LANDMARKS].reverse().find(([h]) => metres >= h);
@@ -256,9 +279,14 @@ function renderScrollMeter(scroll) {
   const sites = document.getElementById("scroll-sites");
   sites.innerHTML = "";
   const top = Object.entries(todayScroll).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  let scrollRowIndex = 0;
   for (const [domain, px] of top) {
     const row = document.createElement("div");
     row.className = "scroll-site";
+    if (animating()) {
+      row.classList.add("animate-row");
+      row.style.animationDelay = `${300 + scrollRowIndex++ * 70}ms`;
+    }
     const name = document.createElement("span");
     name.textContent = domain;
     const val = document.createElement("span");
@@ -450,8 +478,9 @@ function renderProductivity(todayData, data, limits) {
   text.setAttribute("font-size", "10");
   text.setAttribute("font-weight", "600");
   text.setAttribute("fill", "currentColor");
-  text.textContent = total > 0 ? score : "—";
+  text.textContent = total > 0 ? "0" : "—";
   svg.appendChild(text);
+  if (total > 0) countUp(text, score, (v) => String(v), 800);
 
   document.getElementById("score-ring").replaceChildren(svg);
 
@@ -559,10 +588,13 @@ function renderSummary(todayData, weekTotals, data, rankedSites) {
     (d) => Object.keys(data[d.key] || {}).length > 0
   ).length;
 
-  document.getElementById("stat-today").textContent = formatClock(todayTotal);
-  document.getElementById("stat-week").textContent = formatDuration(weekTotal);
-  document.getElementById("stat-avg").textContent = formatDuration(
-    activeDays ? Math.round(weekTotal / activeDays) : 0
+  countUp(document.getElementById("stat-today"), todayTotal, formatClock);
+  countUp(document.getElementById("stat-week"), weekTotal, formatDuration, 850);
+  countUp(
+    document.getElementById("stat-avg"),
+    activeDays ? Math.round(weekTotal / activeDays) : 0,
+    formatDuration,
+    850
   );
   document.getElementById("stat-top").textContent = rankedSites.length
     ? rankedSites[0][0]
@@ -618,7 +650,7 @@ function renderStackedChart(week, data, rankedSites) {
       rect.setAttribute("height", Math.max(h, 0));
       rect.setAttribute("rx", 3);
       rect.setAttribute("fill", seg.domain === "Other" ? OTHER_COLOR : colorOf(seg.domain));
-      if (animating()) {
+      if (animating() || chartAnimateOnce) {
         rect.setAttribute("class", "grow");
         rect.style.animationDelay = `${i * 35}ms`;
       }
@@ -657,15 +689,21 @@ function renderStackedChart(week, data, rankedSites) {
   });
 
   document.getElementById("stacked-chart").replaceChildren(svg);
+  chartAnimateOnce = false;
 
   // Legend
   const legend = document.getElementById("legend");
   legend.innerHTML = "";
   const items = topSites.map((d, i) => [d, PALETTE[i % PALETTE.length]]);
   if (rankedSites.length > topSites.length) items.push(["Other", OTHER_COLOR]);
+  let legendIndex = 0;
   for (const [name, color] of items) {
     const item = document.createElement("span");
     item.className = "legend-item";
+    if (animating()) {
+      item.classList.add("animate-row");
+      item.style.animationDelay = `${350 + legendIndex++ * 50}ms`;
+    }
     const swatch = document.createElement("span");
     swatch.className = "legend-swatch";
     swatch.style.background = color;
@@ -716,6 +754,10 @@ function renderLimitsOverview(limits, todayData, snoozeLog = {}) {
 
     const line = document.createElement("div");
     line.className = "limit-line";
+    if (animating()) {
+      line.classList.add("animate-row");
+      line.style.animationDelay = `${container.children.length * 60}ms`;
+    }
 
     const top = document.createElement("div");
     top.className = "limit-line-top";
@@ -755,8 +797,13 @@ function renderTable(rankedSites, todayData, weekTotals) {
   tbody.innerHTML = "";
   const weekTotal = Object.values(weekTotals).reduce((s, v) => s + v, 0) || 1;
 
+  let tableRowIndex = 0;
   for (const [domain, total] of rankedSites) {
     const tr = document.createElement("tr");
+    if (animating()) {
+      tr.classList.add("animate-row");
+      tr.style.animationDelay = `${Math.min(tableRowIndex++, 14) * 40}ms`;
+    }
 
     const siteTd = document.createElement("td");
     const cell = document.createElement("div");

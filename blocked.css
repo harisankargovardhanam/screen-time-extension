@@ -34,9 +34,15 @@
   padding: 0;
 }
 
-/* The hidden attribute must always win over class display rules. */
 [hidden] {
   display: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }
 
 body {
@@ -69,6 +75,13 @@ body {
 .block-icon {
   font-size: 52px;
   margin-bottom: 16px;
+  display: inline-block;
+  animation: float 3.5s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
 }
 
 h1 {
