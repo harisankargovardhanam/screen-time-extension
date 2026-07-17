@@ -41,6 +41,34 @@
   display: none !important;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.995); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes cell-in {
+  from { opacity: 0; transform: scale(0.6); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes bar-grow {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+
+@keyframes achieve-pop {
+  0% { opacity: 0; transform: scale(0.85); }
+  70% { transform: scale(1.03); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
 body {
   font-family: "Google Sans", -apple-system, BlinkMacSystemFont, "Segoe UI",
     Roboto, sans-serif;
@@ -116,6 +144,44 @@ h1 {
   box-shadow: var(--shadow);
   padding: 20px;
   margin-bottom: 16px;
+  animation: card-in 0.35s cubic-bezier(0.2, 0, 0, 1) both;
+  transition: box-shadow 0.2s, transform 0.2s;
+}
+
+.card:hover {
+  box-shadow: 0 2px 6px rgba(20, 30, 60, 0.08), 0 8px 20px rgba(20, 30, 60, 0.09);
+  transform: translateY(-1px);
+}
+
+/* Page-load stagger, top to bottom. */
+.summary-grid .card:nth-child(2) { animation-delay: 40ms; }
+.summary-grid .card:nth-child(3) { animation-delay: 80ms; }
+.summary-grid .card:nth-child(4) { animation-delay: 120ms; }
+.page > .two-col:nth-of-type(1) .card:nth-child(1) { animation-delay: 120ms; }
+.page > .two-col:nth-of-type(1) .card:nth-child(2) { animation-delay: 160ms; }
+.page > section.card { animation-delay: 180ms; }
+
+.cal-cell.animate,
+.heat-cell.animate {
+  animation: cell-in 0.3s cubic-bezier(0.2, 0, 0, 1) both;
+}
+
+#stacked-chart rect.grow {
+  transform-box: fill-box;
+  transform-origin: center bottom;
+  animation: bar-grow 0.5s cubic-bezier(0.2, 0, 0, 1) both;
+}
+
+.achieve:not(.locked).animate {
+  animation: achieve-pop 0.4s cubic-bezier(0.2, 0, 0, 1) both;
+}
+
+.achieve {
+  transition: transform 0.15s;
+}
+
+.achieve:not(.locked):hover {
+  transform: translateY(-2px);
 }
 
 .card-header {

@@ -129,6 +129,8 @@ function lastNDays(n) {
 }
 
 let initialized = false;
+// Animate charts only on the very first render, not on 60s refreshes.
+const animating = () => !initialized;
 
 async function main() {
   const store = await chrome.storage.local.get([
@@ -219,6 +221,10 @@ function renderCalendar(data, todayData) {
   days.forEach((day, i) => {
     const cell = document.createElement("div");
     cell.className = "cal-cell" + (day.isToday ? " today" : "");
+    if (animating()) {
+      cell.classList.add("animate");
+      cell.style.animationDelay = `${i * 8}ms`;
+    }
     if (totals[i] > 0) {
       const intensity = 0.2 + 0.8 * (totals[i] / max);
       cell.style.background = `color-mix(in srgb, var(--primary) ${Math.round(intensity * 100)}%, var(--surface-variant))`;
@@ -269,6 +275,10 @@ function renderAchievements(unlocked) {
     const card = document.createElement("div");
     card.className =
       "achieve" + (unlocked[id] ? "" : " locked") + (a.dubious ? " dubious" : "");
+    if (animating() && unlocked[id]) {
+      card.classList.add("animate");
+      card.style.animationDelay = `${Object.keys(ACHIEVEMENTS).indexOf(id) * 60}ms`;
+    }
     const emoji = document.createElement("span");
     emoji.className = "achieve-emoji";
     emoji.textContent = a.emoji;
@@ -333,8 +343,15 @@ function renderCategories(todayData) {
       arc.setAttribute("fill", "none");
       arc.setAttribute("stroke", CATEGORY_COLORS[cat]);
       arc.setAttribute("stroke-width", 5);
-      arc.setAttribute("stroke-dasharray", `${pct} ${C - pct}`);
+      arc.setAttribute("stroke-dasharray", animating() ? `0 ${C}` : `${pct} ${C - pct}`);
       arc.setAttribute("stroke-dashoffset", offset);
+      if (animating()) {
+        arc.style.transition = "stroke-dasharray 0.7s cubic-bezier(0.2, 0, 0, 1)";
+        const target = `${pct} ${C - pct}`;
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => arc.setAttribute("stroke-dasharray", target))
+        );
+      }
       const title = document.createElementNS(svgNS, "title");
       title.textContent = `${cat}: ${formatDuration(seconds)}`;
       arc.appendChild(title);
@@ -415,8 +432,15 @@ function renderProductivity(todayData, data, limits) {
   val.setAttribute("stroke", color);
   val.setAttribute("stroke-width", 5);
   val.setAttribute("stroke-linecap", "round");
-  val.setAttribute("stroke-dasharray", `${score} ${C - score}`);
+  val.setAttribute("stroke-dasharray", animating() ? `0 ${C}` : `${score} ${C - score}`);
   val.setAttribute("stroke-dashoffset", 25);
+  if (animating()) {
+    val.style.transition = "stroke-dasharray 0.7s cubic-bezier(0.2, 0, 0, 1)";
+    const targetDash = `${score} ${C - score}`;
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => val.setAttribute("stroke-dasharray", targetDash))
+    );
+  }
   svg.appendChild(val);
 
   const text = document.createElementNS(svgNS, "text");
@@ -594,6 +618,10 @@ function renderStackedChart(week, data, rankedSites) {
       rect.setAttribute("height", Math.max(h, 0));
       rect.setAttribute("rx", 3);
       rect.setAttribute("fill", seg.domain === "Other" ? OTHER_COLOR : colorOf(seg.domain));
+      if (animating()) {
+        rect.setAttribute("class", "grow");
+        rect.style.animationDelay = `${i * 35}ms`;
+      }
       const title = document.createElementNS(svgNS, "title");
       title.textContent = `${seg.domain}: ${formatDuration(seg.seconds)} (${day.label})`;
       rect.appendChild(title);
@@ -655,6 +683,10 @@ function renderHeatmap(hours) {
     const seconds = hours[h] || 0;
     const cell = document.createElement("div");
     cell.className = "heat-cell";
+    if (animating()) {
+      cell.classList.add("animate");
+      cell.style.animationDelay = `${h * 12}ms`;
+    }
     if (seconds > 0) {
       const intensity = 0.25 + 0.75 * (seconds / max);
       cell.style.background = `color-mix(in srgb, var(--primary) ${Math.round(intensity * 100)}%, var(--surface-variant))`;

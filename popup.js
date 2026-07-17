@@ -192,12 +192,23 @@ function renderHero(todayData, data, activeDomain, settings = {}) {
     });
   }
   const max = Math.max(...days.map((d) => d.total), 1);
+  const targets = [];
   for (const day of days) {
     const bar = document.createElement("div");
     bar.className = "week-bar" + (day.isToday ? " today" : "");
-    bar.style.height = `${Math.max(7, (day.total / max) * 100)}%`;
+    const target = `${Math.max(7, (day.total / max) * 100)}%`;
+    bar.style.height = firstRender ? "7%" : target;
     bar.title = `${day.label}: ${formatDuration(day.total)}`;
     week.appendChild(bar);
+    targets.push([bar, target]);
+  }
+  if (firstRender) {
+    // Grow bars to their real height after first paint.
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        for (const [bar, target] of targets) bar.style.height = target;
+      })
+    );
   }
 }
 
@@ -295,14 +306,24 @@ function progressRing(fraction, over) {
   const r = 12;
   const c = 2 * Math.PI * r;
   const clamped = Math.min(fraction, 1);
+  const target = c * (1 - clamped);
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("viewBox", "0 0 30 30");
   svg.setAttribute("class", "ring" + (over ? " over" : ""));
+  // On first paint start empty and sweep to the target (CSS transition).
+  const initial = firstRender ? c : target;
   svg.innerHTML =
     `<circle class="ring-bg" cx="15" cy="15" r="${r}"></circle>` +
     `<circle class="ring-val" cx="15" cy="15" r="${r}" ` +
-    `stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - clamped)}"></circle>` +
+    `stroke-dasharray="${c}" stroke-dashoffset="${initial}"></circle>` +
     `<text x="15" y="15.5">${Math.round(fraction * 100)}</text>`;
+  if (firstRender) {
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        svg.querySelector(".ring-val").style.strokeDashoffset = target;
+      })
+    );
+  }
   return svg;
 }
 
